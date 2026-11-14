@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# secrets
+.env
+.secrets/
+scripts/.*
+!scripts/.gitkeep
+
+# python / node build output
+__pycache__/
+.venv/
+*.pyc
+node_modules/
+dist/
+.taste-skill/
+
+# local logs and test artefacts
+*.log
+scripts/mock_site_log.json
+scripts/gemini-*.png
+scripts/shots/
+scripts/out/
