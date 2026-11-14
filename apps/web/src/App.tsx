@@ -1,0 +1,91 @@
+import { lazy, Suspense } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import DashboardLayout from './components/DashboardLayout'
+import { api, auth } from './lib/api'
+import Landing from './pages/Landing'
+
+// Keep the public landing page independent of dashboard charts and editors.
+const Approvals = lazy(() => import('./pages/Approvals'))
+const Calls = lazy(() => import('./pages/Calls'))
+const Campaigns = lazy(() => import('./pages/Campaigns'))
+const Customers = lazy(() => import('./pages/Customers'))
+const CustomerDetail = lazy(() => import('./pages/Customers').then((m) => ({ default: m.CustomerDetail })))
+const InboxPage = lazy(() => import('./pages/Inbox'))
+const Queries = lazy(() => import('./pages/Queries'))
+const Insights = lazy(() => import('./pages/Insights'))
+const Integrations = lazy(() => import('./pages/Integrations'))
+const DeveloperDocs = lazy(() => import('./pages/Integrations').then((m) => ({ default: m.DeveloperDocs })))
+const Setup = lazy(() => import('./pages/Setup'))
+const Profile = lazy(() => import('./pages/Profile'))
+const Knowledge = lazy(() => import('./pages/Knowledge'))
+const Leads = lazy(() => import('./pages/Leads'))
+const LeadDetail = lazy(() => import('./pages/Leads').then((m) => ({ default: m.LeadDetail })))
+const Learning = lazy(() => import('./pages/Learning'))
+const Login = lazy(() => import('./pages/Auth'))
+const Signup = lazy(() => import('./pages/Auth').then((m) => ({ default: m.Signup })))
+const Policies = lazy(() => import('./pages/Policies'))
+const Security = lazy(() => import('./pages/Security'))
+const SettingsPage = lazy(() => import('./pages/Settings'))
+const Simulations = lazy(() => import('./pages/Simulations'))
+const SimRun = lazy(() => import('./pages/Simulations').then((m) => ({ default: m.SimRun })))
+const Simulator = lazy(() => import('./pages/Simulator'))
+const StoreDemo = lazy(() => import('./pages/StoreDemo'))
+const TicketPage = lazy(() => import('./pages/Ticket'))
+
+export default function App() {
+  return (
+    <Suspense fallback={<div className="min-h-full bg-[#eae6de] p-8 text-[#12374f]">Loading Sahay…</div>}>
+    <Routes>
+      <Route path="/" element={<Landing />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Signup />} />
+      <Route path="/store/:key" element={<StoreDemo />} />
+      <Route path="/*" element={<Protected />} />
+    </Routes>
+    </Suspense>
+  )
+}
+
+function Protected() {
+  const { pathname } = useLocation()
+  const signedIn = !!auth.get()?.token
+  const { data: me } = useQuery({ queryKey: ['me', auth.get()?.tenant], queryFn: () => api('/v1/me'), enabled: signedIn })
+  if (!signedIn) return <Navigate to="/login" replace />
+  // A new workspace finishes the setup wizard once, before it sees the dashboard
+  if (pathname === '/setup') return <Setup />
+  if (me && me.setup_done === false) return <Navigate to="/setup" replace />
+  return (
+    <DashboardLayout>
+      <Routes>
+        <Route path="/" element={<Navigate to="/inbox" replace />} />
+        <Route path="/inbox" element={<InboxPage />} />
+        <Route path="/queries" element={<Navigate to="/queries/email" replace />} />
+        <Route path="/queries/:channel" element={<Queries />} />
+        <Route path="/tickets/:id" element={<TicketPage />} />
+        <Route path="/approvals" element={<Approvals />} />
+        {/* Retained for internal use; the conversation tester has no frontend navigation entry. */}
+        <Route path="/simulator" element={<Simulator />} />
+        <Route path="/customers" element={<Customers />} />
+        <Route path="/customers/:id" element={<CustomerDetail />} />
+        <Route path="/leads" element={<Leads />} />
+        <Route path="/leads/:id" element={<LeadDetail />} />
+        <Route path="/campaigns" element={<Campaigns />} />
+        <Route path="/calls" element={<Calls />} />
+        <Route path="/studio" element={<Navigate to="/integrations?tab=agent" replace />} />
+        <Route path="/knowledge" element={<Knowledge />} />
+        <Route path="/policies" element={<Policies />} />
+        <Route path="/simulations" element={<Simulations />} />
+        <Route path="/simulations/:id" element={<SimRun />} />
+        <Route path="/insights" element={<Insights />} />
+        <Route path="/learning" element={<Learning />} />
+        <Route path="/security" element={<Security />} />
+        <Route path="/integrations" element={<Integrations />} />
+        <Route path="/developer" element={<DeveloperDocs />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="*" element={<Navigate to="/inbox" replace />} />
+      </Routes>
+    </DashboardLayout>
+  )
+}
