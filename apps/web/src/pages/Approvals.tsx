@@ -1,0 +1,69 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CheckSquare } from 'lucide-react'
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Badge, Button, Card, Empty, FrustrationBar, PageHeader, Spinner, Tabs } from '../components/ui'
+import { useTicketRef } from '../lib/useTicketRef'
+import { api } from '../lib/api'
+import { ago, humanize, inr } from '../lib/format'
+
+export default function Approvals() {
+  const tref = useTicketRef()
+  const qc = useQueryClient()
+  const [status, setStatus] = useState('pending')
+  const { data, isLoading } = useQuery({ queryKey: ['approvals', status], queryFn: () => api(`/v1/approvals?status=${status}`), refetchInterval: 3000 })
+  const decide = useMutation({
+    mutationFn: ({ id, decision }: { id: string; decision: string }) => api(`/v1/approvals/${id}/decide`, { body: { decision } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['approvals'] }),
+  })
+  const sendDraft = useMutation({ mutationFn: (id: string) => api(`/v1/drafts/${id}/send`, { body: {} }), onSuccess: () => qc.invalidateQueries({ queryKey: ['approvals'] }) })
+  return (
+    <>
+      <PageHeader title="Approvals" subtitle="Actions and replies waiting for approval, and what your agent handled on its own." />
+      <Card pad={false}>
+        <div className="px-3 pt-1"><Tabs value={status} onChange={setStatus} tabs={[{ id: 'pending', label: 'Pending' }, { id: 'approved', label: 'Approved' }, { id: 'rejected', label: 'Rejected' }, { id: 'auto', label: 'Handled by AI' }]} /></div>
+        {isLoading ? <Spinner /> : !data?.length ? (
+          <Empty icon={<CheckSquare className="h-10 w-10" />} title={status === 'auto' ? 'Nothing handled yet' : status === 'pending' ? 'Nothing waiting' : 'Nothing here yet'}>
+            {status === 'auto' ? 'Replies, resolutions and actions your agent completed on its own appear here.' : 'Actions that need your approval will appear here.'}
+          </Empty>
+        ) : (
+          <div className="approval-list">
+            {data.map((a: any) => (
+              <article key={a.id} className="approval-row">
+                <div className="approval-content">
+                  <div className="approval-meta">
+                    <Badge tone={a.kind === 'action' ? 'amber' : a.kind === 'handoff' ? 'red' : a.kind === 'resolved' ? 'green' : 'blue'}>{
+                      a.kind === 'action' ? humanize(a.action_type) : a.kind === 'handoff' ? 'Handoff to human'
+                        : a.kind === 'resolved' ? 'Resolved by AI' : a.kind === 'replied' ? 'Replied by AI' : 'Reply draft'}</Badge>
+                    {status === 'auto' && a.kind === 'action' && <Badge tone="green">Approved by policy</Badge>}
+                    {a.value_paise > 0 && <Badge>{inr(a.value_paise, true)}</Badge>}
+                    <Link to={`/tickets/${a.ticket_id}`} className="text-xs font-medium text-brand-700 hover:underline">Ticket {tref(a.number)}</Link>
+                    <span className="text-xs text-slate-500">{a.customer_name} · {ago(a.created_at)}</span>
+                    {a.decided_via && <Badge tone="violet">via {a.decided_via}</Badge>}
+                  </div>
+                  <div className="approval-summary">{a.summary}</div>
+                  {a.draft_text && <div className="approval-draft">{a.draft_text}</div>}
+                  {a.suggestion && <div className="approval-suggestion">{a.suggestion}</div>}
+                </div>
+                <div className="approval-actions">
+                  <FrustrationBar value={a.frustration_score} />
+                  {status === 'pending' && (a.kind === 'action' ? (
+                    <div className="flex gap-1.5">
+                      <Button size="sm" variant="success" onClick={() => decide.mutate({ id: a.id, decision: 'approve' })}>Approve</Button>
+                      <Button size="sm" variant="secondary" onClick={() => decide.mutate({ id: a.id, decision: 'reject' })}>Reject</Button>
+                    </div>
+                  ) : a.kind === 'draft' ? (
+                    <div className="flex gap-1.5">
+                      <Button size="sm" onClick={() => sendDraft.mutate(a.draft_id)}>Send as is</Button>
+                      <Link to={`/tickets/${a.ticket_id}`}><Button size="sm" variant="secondary">Edit</Button></Link>
+                    </div>
+                  ) : <Link to={`/tickets/${a.ticket_id}`}><Button size="sm">Open</Button></Link>)}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </Card>
+    </>
+  )
+}
